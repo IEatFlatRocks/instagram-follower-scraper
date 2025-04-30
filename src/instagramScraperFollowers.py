@@ -13,6 +13,7 @@ import csv
 import sys
 import pickle
 from datetime import datetime, timedelta
+from nicheIdentifier import isNiche
 
 
 
@@ -52,6 +53,9 @@ INSTAGRAM_PASSWORD = os.getenv('INSTAGRAM_PASSWORD')
 TARGET_USERNAME = os.getenv('TARGET_USERNAME', 'gymshark')
 MAX_USERS = int(os.getenv('MAX_USERS', 50))
 CSV_FILENAME = os.getenv('CSV_FILENAME', 'influencers.csv')
+NICHE = os.getenv('NICHE')
+MAX_FOLLOWERS = int(os.getenv('MAX_FOLLOWERS', 1000000000))
+MIN_FOLLOWERS = int(os.getenv('MIN_FOLLOWERS', 1000))
 
 # --- Setup ---
 options = uc.ChromeOptions()
@@ -229,11 +233,22 @@ def scrape_user_info(username):
             bio = ""
             print("[WARN] Bio not found.")
 
+        if not isNiche(bio, NICHE):
+            print(f"[SKIP] @{username} does not match the niche.")
+            return None
+        else:
+            print(f"[INFO] @{username} matches the niche.")
+
         # Scrape followers
         try:
             followers_element = driver.find_element(By.XPATH, "//ul//li//a")
             followers = followers_element.get_attribute('title') or followers_element.text
             followers = parse_followers(followers)
+            if followers > MAX_FOLLOWERS or followers < MIN_FOLLOWERS:
+                print(f"[SKIP] @{username} has {followers} followers, outside the specified range.")
+                return None
+            else:
+                print(f"[INFO] @{username} has {followers} followers.")
         except Exception:
             followers = "UNKNOWN"
             print("[WARN] Followers count not found.")
@@ -255,6 +270,8 @@ def scrape_user_info(username):
                             post = post_candidate
                             print(f"[INFO] Selected post in row {row_index}, column {post_index} without pinned icon.")
                             raise StopIteration  # Exit both loops
+                        else:
+                            print(f"[DEBUG] Post in row {row_index}, column {post_index} is pinned. Skipping...")
                 except NoSuchElementException:
                     print(f"[DEBUG] Row div[{row_index}] not found or empty.")
                     break
