@@ -302,15 +302,21 @@ def scrape_user_info(username):
         return None
 
 def save_to_csv(user_data_list):
+    # Ensure the 'data' folder exists
+    data_folder = "data"
+    os.makedirs(data_folder, exist_ok=True)
+
+    # Save the CSV file in the 'data' folder
+    csv_path = os.path.join(data_folder, CSV_FILENAME)
     keys = ["Username", "Bio", "Followers", "Last_Post_Date", "How_Found"]
     try:
-        with open(CSV_FILENAME, 'w', newline='', encoding='utf-8') as output_file:
+        with open(csv_path, 'w', newline='', encoding='utf-8') as output_file:
             dict_writer = csv.DictWriter(output_file, fieldnames=keys)
             dict_writer.writeheader()
             dict_writer.writerows(user_data_list)
-        print(f"[INFO] Saved {len(user_data_list)} users to {CSV_FILENAME}")
+        print(f"[INFO] Saved {len(user_data_list)} users to {csv_path}")
     except PermissionError:
-        print(f"[ERROR] Cannot write to {CSV_FILENAME}. Close the file and retry.")
+        print(f"[ERROR] Cannot write to {csv_path}. Close the file and retry.")
 
 # --- Run Script ---
 try:
