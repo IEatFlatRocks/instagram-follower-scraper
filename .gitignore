@@ -41,3 +41,6 @@ build/
 
 # Pickle files
 *.pkl
+
+# CSV files
+*.csv
