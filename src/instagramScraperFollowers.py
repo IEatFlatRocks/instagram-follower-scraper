@@ -15,8 +15,7 @@ import pickle
 from datetime import datetime, timedelta
 from nicheIdentifier import isNiche
 
-
-
+# --- Login using cookies to avoid detection ---
 COOKIES_FILE = 'insta_cookies.pkl'
 
 def save_cookies(driver, filename):
@@ -142,75 +141,77 @@ def scroll_followers_modal():
         print(f"[ERROR] Failed to find the scrollable box: {e}")
         return []
 
+    usernames = set()  # Use a set to avoid duplicates
+    processed_links = set()  # Track processed links to avoid reprocessing
     last_height = driver.execute_script("return arguments[0].scrollHeight", scroll_box)
-    found_users = len(scroll_box.find_elements(By.TAG_NAME, "a"))
+    scroll_attempts = 0
+    max_scroll_attempts = 100  # prevent infinite loops
 
-    while found_users < MAX_USERS:
+    while len(usernames) < MAX_USERS and scroll_attempts < max_scroll_attempts:
+        # Scroll to bottom
         driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", scroll_box)
         time.sleep(2)
 
-        try:
-            WebDriverWait(driver, 5).until(
-                lambda d: len(scroll_box.find_elements(By.TAG_NAME, "a")) > found_users
-            )
-        except:
-            print("[INFO] No new users loaded after scroll, breaking...")
-            break
+        # Get links
+        links = scroll_box.find_elements(By.XPATH, ".//a[not(@style)]")
+        print(f"[DEBUG] Found {len(links)} links in the scroll box.")
 
-        new_height = driver.execute_script("return arguments[0].scrollHeight", scroll_box)
-        print(f"[DEBUG] Scroll position: {new_height}, User count: {found_users}")
-
-        if new_height == last_height:
-            print("[INFO] Reached the bottom of the follower list.")
-            break
-
-        last_height = new_height
-        found_users = len(scroll_box.find_elements(By.TAG_NAME, "a"))
-
-    links = scroll_box.find_elements(By.XPATH, ".//a[not(@style)]")
-    usernames = []
-
-    for link in links:
-        try:
-            # Hover neutral element to close any previous popup
-            search_input = driver.find_element(By.XPATH, "//input[@placeholder='Search']")
-            ActionChains(driver).move_to_element(search_input).perform()
-            time.sleep(0.3)
-
-            # Scroll link into view
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
-            time.sleep(0.3)
-
-            # Hover and scrape
-            user_data = hover_and_scrape(link)
-            if not user_data:
+        for link in links:
+            href = link.get_attribute("href")
+            if href in processed_links:
                 continue
+            processed_links.add(href)
 
-            print(f"[SCRAPED] {user_data}")
-
-            # Skip private accounts
             try:
-                private_banner = driver.find_element(By.XPATH, "//*[contains(text(), 'This Account is Private')]")
-                if private_banner.is_displayed():
-                    print(f"[SKIP] {user_data['username']} is private.")
+                # Unhover by moving to neutral element (Search bar)
+                search_input = driver.find_element(By.XPATH, "//input[@placeholder='Search']")
+                ActionChains(driver).move_to_element(search_input).perform()
+                random_sleep(.1, 1)
+
+                # Scroll link into view
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
+
+                # Hover and scrape
+                user_data = hover_and_scrape(link)
+                if not user_data:
                     continue
-            except:
-                pass  # No private message found, continue as normal
 
-            followers = int(user_data["followers"].replace(",", "")) if user_data["followers"] else 0
-            posts = int(user_data["posts"].replace(",", "")) if user_data["posts"] else 0
+                print(f"[SCRAPED] {user_data}")
 
-            if MIN_FOLLOWERS <= followers <= MAX_FOLLOWERS and posts >= 0:
-                usernames.append(user_data["username"])
+                # Skip private accounts
+                try:
+                    private_banner = driver.find_element(By.XPATH, "//*[contains(text(), 'This Account is Private')]")
+                    if private_banner.is_displayed():
+                        print(f"[SKIP] {user_data['username']} is private.")
+                        continue
+                except:
+                    pass  # No private message found, continue
 
-            if len(usernames) >= MAX_USERS:
-                break
+                # Filters
+                followers = int(user_data["followers"].replace(",", "")) if user_data["followers"] else 0
+                posts = int(user_data["posts"].replace(",", "")) if user_data["posts"] else 0
 
-        except Exception as e:
-            print(f"[ERROR] Error during scraping loop: {e}")
+                if MIN_FOLLOWERS <= followers <= MAX_FOLLOWERS and posts >= 0:
+                    usernames.add(user_data["username"])
+                else:
+                    print(f"[SKIP] {user_data['username']} does not meet the follower/post criteria. Followers: {followers}, Posts: {posts}")
+
+                if len(usernames) >= MAX_USERS:
+                    break
+
+            except Exception as e:
+                print(f"[ERROR] Error scraping user: {e}")
+
+        # Check for scroll height changes
+        new_height = driver.execute_script("return arguments[0].scrollHeight", scroll_box)
+        if new_height == last_height:
+            print("[INFO] No more content to scroll.")
+            break
+        last_height = new_height
+        scroll_attempts += 1
 
     print(f"[INFO] Collected {len(usernames)} filtered usernames.")
-    return usernames
+    return list(usernames)
 
 def hover_and_scrape(element):
     try:
@@ -223,9 +224,10 @@ def hover_and_scrape(element):
             print("[WARN] No username found after hover.")
             return None
 
-        random_sleep(1, 2)
-
         xpath = "//*[contains(@style, 'transform: translate')]//span[contains(@class, 'html-span')][normalize-space(text()) != ''][translate(normalize-space(text()), '0123456789,', '') = '']"
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath)))
         stat_elements = driver.find_elements(By.XPATH, xpath)
         stats = [el.text.strip() for el in stat_elements if el.text.strip()]
 
@@ -283,7 +285,7 @@ def scrape_user_info(username):
 
 
     try:
-        # Check if the account is private
+        # Double check if the account is private
         try:
             private_message = driver.find_element(By.XPATH, "//h2[contains(text(), 'This Account is Private')]")
             if private_message:
