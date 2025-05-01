@@ -134,7 +134,6 @@ def scroll_followers_modal():
     print("[DEBUG] Scrolling the followers modal...")
 
     try:
-        # Wait for scrollable followers container
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.XPATH, "//div[div[contains(@style, 'overflow: hidden auto')]]"))
         )
@@ -168,12 +167,87 @@ def scroll_followers_modal():
         last_height = new_height
         found_users = len(scroll_box.find_elements(By.TAG_NAME, "a"))
 
-    links = scroll_box.find_elements(By.TAG_NAME, "a")
-    usernames = [link.text.strip() for link in links if link.text.strip()]
-    print(f"[INFO] Collected {len(usernames)} usernames.")
+    links = scroll_box.find_elements(By.XPATH, ".//a[not(@style)]")
+    usernames = []
 
-    return usernames[:MAX_USERS]
+    for link in links:
+        try:
+            # Hover neutral element to close any previous popup
+            search_input = driver.find_element(By.XPATH, "//input[@placeholder='Search']")
+            ActionChains(driver).move_to_element(search_input).perform()
+            time.sleep(0.3)
 
+            # Scroll link into view
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
+            time.sleep(0.3)
+
+            # Hover and scrape
+            user_data = hover_and_scrape(link)
+            if not user_data:
+                continue
+
+            print(f"[SCRAPED] {user_data}")
+
+            # Skip private accounts
+            try:
+                private_banner = driver.find_element(By.XPATH, "//*[contains(text(), 'This Account is Private')]")
+                if private_banner.is_displayed():
+                    print(f"[SKIP] {user_data['username']} is private.")
+                    continue
+            except:
+                pass  # No private message found, continue as normal
+
+            followers = int(user_data["followers"].replace(",", "")) if user_data["followers"] else 0
+            posts = int(user_data["posts"].replace(",", "")) if user_data["posts"] else 0
+
+            if MIN_FOLLOWERS <= followers <= MAX_FOLLOWERS and posts >= 0:
+                usernames.append(user_data["username"])
+
+            if len(usernames) >= MAX_USERS:
+                break
+
+        except Exception as e:
+            print(f"[ERROR] Error during scraping loop: {e}")
+
+    print(f"[INFO] Collected {len(usernames)} filtered usernames.")
+    return usernames
+
+def hover_and_scrape(element):
+    try:
+        action = ActionChains(driver)
+        action.move_to_element(element).perform()
+        random_sleep(1, 2)
+
+        username = element.text.strip()
+        if not username:
+            print("[WARN] No username found after hover.")
+            return None
+
+        random_sleep(1, 2)
+
+        xpath = "//*[contains(@style, 'transform: translate')]//span[contains(@class, 'html-span')][normalize-space(text()) != ''][translate(normalize-space(text()), '0123456789,', '') = '']"
+        stat_elements = driver.find_elements(By.XPATH, xpath)
+        stats = [el.text.strip() for el in stat_elements if el.text.strip()]
+
+        if len(stats) >= 3:
+            return {
+                "username": username,
+                "posts": stats[0],
+                "followers": stats[1],
+                "following": stats[2]
+            }
+        else:
+            return {
+                "username": username,
+                "posts": stats[0] if len(stats) > 0 else None,
+                "followers": stats[1] if len(stats) > 1 else None,
+                "following": stats[2] if len(stats) > 2 else None
+            }
+    except Exception as e:
+        print(f"[ERROR] Failed to hover and scrape: {e}")
+        return None
+
+        
 
 def get_follower_usernames():
     print(f"[ACTION] Scraping followers of @{TARGET_USERNAME}...")

@@ -13,13 +13,13 @@ prompt = """
 You are a niche identifier. You will be given a bio and a niche.
 Your task is to determine if the bio is related to the niche. 
 Type a paragraph explaining if the bio is related to the niche.
-Then, make your last word "yes" or "no".
+Then, make your last word "yes" or "no". be reasonable, 
+if a creator is clearly a different niche then dont force a yes.
 Here is the bio and the niche:
 """
 
 def isNiche(bio, niche):
     reponse = requestChat(prompt + bio + ", " + niche)
-    print(reponse)
     return reponse.split()[-1].lower() == "yes"
 
 def requestChat(prompt):    
