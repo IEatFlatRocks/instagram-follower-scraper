@@ -13,7 +13,7 @@ import csv
 import sys
 import pickle
 from datetime import datetime, timedelta
-from nicheIdentifier import isNiche
+from LLMnicheIdentifier import isNiche
 
 # --- Login using cookies to avoid detection ---
 COOKIES_FILE = 'insta_cookies.pkl'

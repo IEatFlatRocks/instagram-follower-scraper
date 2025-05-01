@@ -11,11 +11,13 @@ client = Groq(
 
 prompt = """
 You are a niche identifier. You will be given a bio and a niche.
-Your task is to determine if the bio is related to the niche. 
-Type a paragraph explaining if the bio is related to the niche.
-Then, make your last word "yes" or "no". be reasonable, 
-if a creator is clearly a different niche then dont force a yes.
+Your task is to determine whether the bio genuinely relates to the given niche. Provide a balanced and reasoned explanation in a paragraph.
+- If there is a clear connection, explain how the bio aligns with the niche.
+- If the connection is weak or unclear, state why it does not fit.
+- Do not force a match—if the creator is clearly from a different niche, acknowledge that.
+- End your response with either "yes" or "no" to indicate whether the bio belongs to the niche.
 Here is the bio and the niche:
+
 """
 
 def isNiche(bio, niche):
@@ -37,8 +39,8 @@ def requestChat(prompt):
 
 
 def main():
-    bio = "Neurodiverse online wellness/mindset/mindfulness coach✨work shop based tips and strategies to help overcome our own...  more"
-    niche = "Lifestyle for sigmas"
+    bio = ""
+    niche = "Fitness/Lifestyle"
     result = isNiche(bio, niche)
     print(f"Is the bio related to the niche? {result}")
 
